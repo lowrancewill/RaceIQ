@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Race Sessions</title>
+</head>
+
+<body>
+
+<h1>Uploaded Sessions</h1>
+
+<ul>
+
+{% for r in records %}
+
+<li>
+
+{{ r.filename }}
+
+| Avg Speed: {{ r.avg_speed }}
+
+| Max Speed: {{ r.max_speed }}
+
+| Consistency: {{ r.consistency }}
+
+</li>
+
+{% endfor %}
+
+</ul>
+
+</body>
+
+</html>

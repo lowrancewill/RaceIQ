@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RaceIQ Telemetry Analyzer</title>
+
+    <!-- Plotly is loaded once here; the charts from main.py don't embed their own copy -->
+    <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+
+    <style>
+        body {
+            background: #121212;
+            color: white;
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: auto;
+            padding: 20px;
+        }
+
+        .card {
+            background: #1f1f1f;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            overflow-x: auto;
+        }
+
+        h2 { margin-top: 0; }
+        h3 { margin-bottom: 8px; }
+
+        button {
+            background: #e63946;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        button:hover { background: #ff5c67; }
+
+        input[type="file"] {
+            margin: 15px 0;
+            display: block;
+        }
+
+        select {
+            background: #2a2a2a;
+            color: white;
+            border: 1px solid #444;
+            border-radius: 5px;
+            padding: 8px 10px;
+            margin: 4px 14px 14px 0;
+        }
+
+        label { display: inline-block; font-size: 0.95em; }
+        .hint { color: #aaa; font-size: 0.9em; }
+
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            font-size: 0.95em;
+        }
+
+        th, td {
+            padding: 7px 10px;
+            text-align: right;
+            border-bottom: 1px solid #333;
+            white-space: nowrap;
+        }
+
+        th:first-child, td:first-child { text-align: left; }
+        th { color: #bbb; font-weight: normal; }
+        tr.best td { background: #1d3a24; }
+        tr.selected td { outline: 1px solid #e63946; }
+        tr.dim td { color: #777; }
+
+        .good { color: #6ee787; }
+        .bad { color: #ff7b72; }
+
+        .grid-2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        @media (max-width: 900px) { .grid-2 { grid-template-columns: 1fr; } }
+
+        .stat-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+            gap: 12px;
+        }
+
+        .stat {
+            background: #2a2a2a;
+            border-radius: 8px;
+            padding: 12px 14px;
+        }
+
+        .stat .v { font-size: 1.3em; font-weight: bold; }
+        .stat .k { color: #aaa; font-size: 0.85em; }
+
+        .nav a {
+            color: #8ecae6;
+            margin-right: 14px;
+            text-decoration: none;
+            font-size: 0.95em;
+        }
+
+        .nav a:hover { text-decoration: underline; }
+        .note { color: #aaa; font-size: 0.9em; margin-top: 10px; }
+    </style>
+</head>
+<body>
+
+    <h1>🏎 RaceIQ Telemetry Analyzer</h1>
+
+    <div class="card">
+
+        <h2>Upload Telemetry CSV</h2>
+
+        <form action="/upload" method="post" enctype="multipart/form-data">
+
+            <input
+                type="file"
+                name="file"
+                accept=".csv"
+                required>
+
+            <button type="submit">
+                Analyze Session
+            </button>
+
+        </form>
+
+    </div>
+
+    {% if r %}
+
+    <div class="card nav">
+        <a href="#laps">Laps</a>
+        <a href="#map">Track map</a>
+        <a href="#delta">Delta</a>
+        <a href="#traces">Traces</a>
+        <a href="#corners">Corners</a>
+        <a href="#style">Driving style</a>
+        <a href="#consistency">Consistency</a>
+        <a href="#gears">Gears</a>
+    </div>
+
+    <div class="card">
+        <h2>Session Overview</h2>
+        <div class="stat-grid">
+            <div class="stat"><div class="v">{{ r.stats.track }}</div><div class="k">Track{% if r.stats.track_length %} · {{ r.stats.track_length }} m{% endif %}</div></div>
+            <div class="stat"><div class="v">{{ r.stats.car }}</div><div class="k">Car</div></div>
+            <div class="stat"><div class="v">{{ r.stats.best_time }}</div><div class="k">Best lap (lap {{ r.stats.best_lap }})</div></div>
+            <div class="stat"><div class="v">{{ r.stats.laps }} / {{ r.stats.clean_laps }}</div><div class="k">Laps total / clean flying laps</div></div>
+            <div class="stat"><div class="v">{{ r.stats.max_speed }} km/h</div><div class="k">Top speed</div></div>
+            <div class="stat"><div class="v">{{ r.stats.max_rpm }}</div><div class="k">Max RPM</div></div>
+            <div class="stat"><div class="v">{{ r.stats.corners }}</div><div class="k">Corners detected</div></div>
+            <div class="stat"><div class="v">{{ r.stats.rows }}</div><div class="k">Samples</div></div>
+        </div>
+    </div>
+
+    <div class="card" id="laps">
+        <h2>Laps</h2>
+
+        <form action="/analyze" method="get">
+            <input type="hidden" name="file" value="{{ r.file }}">
+
+            <label>
+                Lap to analyze<br>
+                <select name="lap">
+                    {% for o in r.lap_options %}
+                    <option value="{{ o.value }}" {% if o.value == r.lap %}selected{% endif %}>{{ o.label }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+
+            <label>
+                Compare against (reference)<br>
+                <select name="ref">
+                    {% for o in r.lap_options %}
+                    <option value="{{ o.value }}" {% if o.value == r.ref %}selected{% endif %}>{{ o.label }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+
+            <button type="submit">Update</button>
+        </form>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Lap</th>
+                    <th>Time</th>
+                    <th>Gap to best</th>
+                    <th>Top speed (km/h)</th>
+                    <th>Avg speed (km/h)</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for l in r.lap_rows %}
+                <tr class="{% if l.status == 'Best' %}best{% endif %} {% if l.lap == r.lap %}selected{% endif %} {% if l.status in ('Out-lap', 'Incomplete', 'Invalid', 'Pit lap') %}dim{% endif %}">
+                    <td>{{ l.lap }}</td>
+                    <td>{{ l.time_str }}</td>
+                    <td>{{ l.delta_str }}</td>
+                    <td>{{ l.top_speed }}</td>
+                    <td>{{ l.avg_speed }}</td>
+                    <td>{{ l.status }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        <p class="note">
+            Lap time is the last recorded <code>lap_time</code> in each lap, so it can read a fraction of a second
+            short of the official time. The outlined row is the lap being analyzed.
+            Out-laps, pit laps, invalid laps and incomplete laps are excluded from best-lap, consistency and shift statistics.
+        </p>
+    </div>
+
+    <div class="card" id="map">
+        <h2>Track Map &mdash; lap {{ r.lap }}</h2>
+        {% if r.charts.track %}
+            {{ r.charts.track | safe }}
+        {% else %}
+            <p>No position columns found in this CSV
+            (looked for <code>world_position_X/Y/Z</code>).</p>
+        {% endif %}
+    </div>
+
+    <div class="card" id="delta">
+        <h2>Time Delta</h2>
+        {% if r.same_lap %}
+            <p>The analyzed lap and the reference lap are the same, so there is no delta to show.
+            Pick a different lap or reference above.</p>
+        {% elif r.delta_chart %}
+            {{ r.delta_chart | safe }}
+            {% if r.loss_map %}
+                {{ r.loss_map | safe }}
+                <p class="note">Red = losing time on that stretch of track compared with the reference lap, green = gaining.</p>
+            {% endif %}
+        {% else %}
+            <p>Delta needs the <code>lap_time</code> column, which wasn't found.</p>
+        {% endif %}
+    </div>
+
+    <div class="card" id="traces">
+        <h2>Traces</h2>
+        {{ r.charts.speed | safe }}
+        {{ r.charts.rpm | safe }}
+        {{ r.charts.tb | safe }}
+        {% if r.charts.steer %}{{ r.charts.steer | safe }}{% endif %}
+        {% if r.charts.accel %}{{ r.charts.accel | safe }}{% endif %}
+    </div>
+
+    <div class="card" id="corners">
+        <h2>Corner Analysis &mdash; lap {{ r.lap }} vs reference lap {{ r.ref }}</h2>
+        {% if r.corner_rows %}
+        <table>
+            <thead>
+                <tr>
+                    <th rowspan="2">Corner</th>
+                    <th rowspan="2">At (m)</th>
+                    <th colspan="3">Reference (lap {{ r.ref }})</th>
+                    <th colspan="3">Lap {{ r.lap }}</th>
+                    <th colspan="3">Difference</th>
+                </tr>
+                <tr>
+                    <th>Brake pt (m)</th><th>Min km/h</th><th>Exit km/h</th>
+                    <th>Brake pt (m)</th><th>Min km/h</th><th>Exit km/h</th>
+                    <th>Brake pt</th><th>Min speed</th><th>Exit speed</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for c in r.corner_rows %}
+                <tr>
+                    <td>C{{ c.num }}</td>
+                    <td>{{ c.dist }}</td>
+                    <td>{{ c.ref_brake }}</td><td>{{ c.ref_min }}</td><td>{{ c.ref_exit }}</td>
+                    <td>{{ c.lap_brake }}</td><td>{{ c.lap_min }}</td><td>{{ c.lap_exit }}</td>
+                    <td>{{ c.d_brake }}</td>
+                    <td class="{{ c.cls_min }}">{{ c.d_min }}</td>
+                    <td class="{{ c.cls_exit }}">{{ c.d_exit }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        <p class="note">
+            Corners are the speed minima on the reference lap. Brake point is where you first touched the brake
+            before the corner (&ldquo;&mdash;&rdquo; means no braking, i.e. a lift). A positive brake-point difference
+            means you braked later. Green = higher speed than the reference.
+        </p>
+        {% else %}
+            <p>No corners were detected on the reference lap.</p>
+        {% endif %}
+    </div>
+
+    <div class="card" id="style">
+        <h2>Driving Style</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Metric</th>
+                    <th>Lap {{ r.lap }}</th>
+                    <th>Reference (lap {{ r.ref }})</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for s in r.style_rows %}
+                <tr>
+                    <td>{{ s.label }}</td>
+                    <td>{{ s.lap }}</td>
+                    <td>{{ s.ref }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        <p class="note">
+            Percentages are shares of lap distance. Roughness is the average change in pedal position from one
+            sample to the next, as a percentage of that pedal's range.
+        </p>
+    </div>
+
+    <div class="card" id="consistency">
+        <h2>Consistency</h2>
+        {% if r.consistency %}
+            <p>Based on {{ r.consistency.n_laps }} clean laps.
+            {% if r.consistency.worst %}Least consistent corner: <strong>{{ r.consistency.worst }}</strong>.{% endif %}</p>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th>Corner</th>
+                        <th>Laps</th>
+                        <th>Brake point spread</th>
+                        <th>Apex speed spread</th>
+                        <th>Exit speed spread</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for c in r.consistency.table %}
+                    <tr>
+                        <td>{{ c.corner }}</td>
+                        <td>{{ c.n }}</td>
+                        <td>{{ c.brake_std_str }}</td>
+                        <td>{{ c.min_std_str }}</td>
+                        <td>{{ c.exit_std_str }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            <p class="note">Spread is the standard deviation across laps. Smaller means more repeatable.</p>
+
+            {{ r.consistency.speed_chart | safe }}
+            {{ r.consistency.brake_chart | safe }}
+        {% else %}
+            <p>Consistency needs at least two complete flying laps in the file.</p>
+        {% endif %}
+    </div>
+
+    <div class="card" id="gears">
+        <h2>Gears &amp; Shifts</h2>
+        {% if r.gears %}
+            <p>Max RPM seen in this file: <strong>{{ r.gears.max_rpm }}</strong>.
+            Upshifts below {{ r.gears.short_limit }} RPM are counted as short shifts.
+            Time spent within 2% of max RPM: <strong>{{ r.gears.near_limit_pct }}</strong> of distance.</p>
+
+            {% if r.gears.table %}
+            <table>
+                <thead>
+                    <tr>
+                        <th>Shift</th>
+                        <th>Count</th>
+                        <th>Avg RPM</th>
+                        <th>Min RPM</th>
+                        <th>Max RPM</th>
+                        <th>Short shifts</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for s in r.gears.table %}
+                    <tr>
+                        <td>{{ s.shift }}</td>
+                        <td>{{ s.count }}</td>
+                        <td>{{ s.avg }}</td>
+                        <td>{{ s.min }}</td>
+                        <td>{{ s.max }}</td>
+                        <td class="{% if s.short %}bad{% endif %}">{{ s.short }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+                <p>No upshifts were detected.</p>
+            {% endif %}
+
+            {% if r.gears.hist %}{{ r.gears.hist | safe }}{% endif %}
+            {% if r.gears.usage %}{{ r.gears.usage | safe }}{% endif %}
+            {% if r.gears.map %}{{ r.gears.map | safe }}{% endif %}
+            <p class="note">&ldquo;Short shift&rdquo; and &ldquo;near limit&rdquo; are measured against the highest RPM in this file,
+            since the car's real rev limit isn't in the data.</p>
+        {% else %}
+            <p>No <code>gear</code> column found in this CSV.</p>
+        {% endif %}
+    </div>
+
+    {% endif %}
+
+</body>
+</html>
