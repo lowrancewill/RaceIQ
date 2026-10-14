@@ -885,7 +885,7 @@ def build_overlay_charts(df, overlay_laps, lap_df, ref_df, lap, ref):
     if "steering" in lap_df.columns:
         steer_fig = px.line(
             lap_df, x="distance", y="steering",
-            title=f"Steering (lap {lap})", labels={"distance": x_title},
+            title=f"Steering (lap {lap} - where positive is right and negative is left)", labels={"distance": x_title},
         )
         steer_fig.update_layout(height=380)
         charts["steer"] = plot_html(steer_fig)
