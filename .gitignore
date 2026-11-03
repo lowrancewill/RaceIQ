@@ -1,0 +1,17 @@
+# Terraform working folder (providers are re-downloaded by `terraform init`)
+.terraform/
+
+# State files: contain passwords and connection strings in plain text
+*.tfstate
+*.tfstate.*
+terraform.tfstate.d/
+
+# Saved plans: also contain sensitive values
+*.tfplan
+
+# Crash logs
+crash.log
+crash.*.log
+
+# Packaged application code (rebuilt before each deploy)
+app.zip
